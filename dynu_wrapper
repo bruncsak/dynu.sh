@@ -1,0 +1,13 @@
+#! /usr/bin/env sh
+
+# Wrapper script for https://github.com/bruncsak/ght-acme.sh
+
+# You call it that way:
+# letsencrypt.sh sign -P dynu_wrapper -l dns-01 ...
+
+DEBUG=
+# Uncomment for debug
+# DEBUG="-d 2"
+
+echo "update $1 $2 60 IN TXT $3" |
+$(dirname $0)/dynu.sh $DEBUG nsupdate
