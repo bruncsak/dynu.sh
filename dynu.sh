@@ -1,7 +1,7 @@
 #! /usr/bin/env sh
 #
 # dynu.com DDNS update program
-# (C) 2023 Attila Bruncsak
+# (C) 2023,2024 Attila Bruncsak
 # Usage:
 #  - no argument: updates the IPv4/IPv6 addresses of the configured domains in dynu.com
 #  - argument "nsupdate": reads the nsupdate style commands on the standard input.
@@ -10,7 +10,7 @@
 #  - argument "getdns": list the records of the zones. Does not include the IP address(es) of the apex.
 #
 # the date of the that version
-VERSION_DATE="2023-10-20"
+VERSION_DATE="2024-04-16"
 
 # The meaningful User-Agent to help finding related log entries in the dynu.com server log
 USER_AGENT="dynu.sh/$VERSION_DATE (https://github.com/bruncsak/dynu.sh)"
@@ -161,37 +161,64 @@ else
 }'
 }
 
-curl_exit_check ()
+curl_return_text ()
 {
-    if [ "$1" -ne 0 ] ;then
-        errmsg "error while making a web request to \"$2\""
-        errmsg "curl exit status: $1"
-        case "$1" in
-            # see man curl "EXIT CODES"
-             3) errmsg "malformed URI" ;;
-             6) errmsg "could not resolve host" ;;
-             7) errmsg "failed to connect" ;;
-            28) errmsg "operation timeout" ;;
-            35) errmsg "SSL connect error" ;;
-            52) errmsg "the server did not reply anything" ;;
-            56) errmsg "failure in receiving network data" ;;
+    case "$1" in
+        # see man curl "EXIT CODES"
+         3) TXT=", malformed URI" ;;
+         6) TXT=", could not resolve host" ;;
+         7) TXT=", failed to connect" ;;
+        28) TXT=", operation timeout" ;;
+        35) TXT=", SSL connect error" ;;
+        52) TXT=", the server did not reply anything" ;;
+        56) TXT=", failure in receiving network data" ;;
+         *) TXT="" ;;
+    esac
+    printf "curl return status: %d%s" "$1" "$TXT"
+}
+
+curl_loop()
+{
+    CURL_ACTION="$1"; shift
+    loop_count=0
+    pluriel=""
+    while : ;do
+        dbgmsg "About making a web request to \"$CURL_ACTION\""
+        curl "$@"
+        CURL_RETURN_CODE="$?"
+        [[ "$loop_count" -ge 20 ]] && break
+        case "$CURL_RETURN_CODE" in
+            6) ;;
+            7) ;;
+            28) ;;
+            35) ;;
+            52) ;;
+            56) ;;
+            *) break ;;
         esac
-        exit "$1"
+        (( loop_count += 1 ))
+        dbgmsg "While making a web request to \"$CURL_ACTION\" sleeping $loop_count second$pluriel before retry due to `curl_return_text $CURL_RETURN_CODE`"
+        sleep "$loop_count"
+        pluriel="s"
+    done
+    if [ "$CURL_RETURN_CODE" -ne 0 ] ;then
+        errmsg "While making a web request to \"$CURL_ACTION\" error exiting due to `curl_return_text $CURL_RETURN_CODE` (retry number: $loop_count)"
+        exit "$CURL_RETURN_CODE"
+    else
+        dbgmsg "While making a web request to \"$CURL_ACTION\" continuing due to `curl_return_text $CURL_RETURN_CODE`"
     fi
 }
 
 my_ipv4() {
   # echo 1.2.3.4 ; return
-  # curl -s 'http://ifconfig.me'
-  # curl -s 'http://ipecho.net/plain'
-  # curl -s 'http://checkip.dyndns.com/' | sed -e 's/^.*: *\([0-9.]*\).*$/\1/'
-    curl -s -4 http://ifconfig.co
-    curl_exit_check $? "-4 http://ifconfig.co"
+  # curl_loop "-s 'http://ifconfig.me'" -s 'http://ifconfig.me'
+  # curl_loop "-s 'http://ipecho.net/plain'" -s 'http://ipecho.net/plain'
+  # curl_loop "-s 'http://checkip.dyndns.com/'" -s 'http://checkip.dyndns.com/' | sed -e 's/^.*: *\([0-9.]*\).*$/\1/'
+    curl_loop "-4 http://ifconfig.co" -s -4 http://ifconfig.co
 }
 
 my_ipv6() {
-    curl -s -6 http://ifconfig.co
-    curl_exit_check $? "-6 http://ifconfig.co"
+    curl_loop "-6 http://ifconfig.co" -s -6 http://ifconfig.co
 }
 
 dns_update_data() {
@@ -261,16 +288,14 @@ fi
 
 curl_delete() {
     dbgmsg "curl DELETE, URL: $1"
-    curl -s -A "$USER_AGENT" -X DELETE  "$1" -H "accept: application/json" -H  "API-Key: $API_KEY" -D "$RESP_HEADER" -o "$RESP_BODY"
-    curl_exit_check $? "DELETE $1"
+    curl_loop "DELETE $1" -s -A "$USER_AGENT" -X DELETE  "$1" -H "accept: application/json" -H  "API-Key: $API_KEY" -D "$RESP_HEADER" -o "$RESP_BODY"
     dbgmsg "curl DELETE, output: `cat $RESP_BODY`"
     API_status_check "$1"
 }
 
 curl_get() {
     dbgmsg "curl GET, URL: $1"
-    curl -s -A "$USER_AGENT" -X GET  "$1" -H "accept: application/json" -H  "API-Key: $API_KEY" -D "$RESP_HEADER" -o "$RESP_BODY"
-    curl_exit_check $? "GET $1"
+    curl_loop "GET $1" -s -A "$USER_AGENT" -X GET  "$1" -H "accept: application/json" -H  "API-Key: $API_KEY" -D "$RESP_HEADER" -o "$RESP_BODY"
     dbgmsg "curl GET, output: `cat $RESP_BODY`"
     API_status_check "$1"
 }
@@ -278,8 +303,7 @@ curl_get() {
 curl_post() {
     dbgmsg "curl POST, URL: $1"
     dbgmsg "curl POST, input: $2"
-    curl -s -A "$USER_AGENT" -X POST "$1" -H "accept: application/json" -H  "API-Key: $API_KEY" -D "$RESP_HEADER" -o "$RESP_BODY" -d "$2"
-    curl_exit_check $? "POST $1"
+    curl_loop "POST $1" -s -A "$USER_AGENT" -X POST "$1" -H "accept: application/json" -H  "API-Key: $API_KEY" -D "$RESP_HEADER" -o "$RESP_BODY" -d "$2"
     dbgmsg "curl POST, output: `cat $RESP_BODY`"
     API_status_check "$1" "$2"
 }
@@ -380,13 +404,13 @@ elif [ "$1" = nsupdate ] ;then
             if stricmp "$recordType" "$rec_type" ;then
               textData="`get_value textData "$dnsrecord"`"
               dbgmsg "textData: $textData"
-	      if [ -z "$value" ] || [ "$value" == "$textData" ] ;then
-	        hostId="`get_value id "$dnsrecord"`"
+          if [ -z "$value" ] || [ "$value" == "$textData" ] ;then
+            hostId="`get_value id "$dnsrecord"`"
                 curl_delete "https://api.dynu.com/v2/dns/$domainId/record/$hostId"
-	      else
-		dbgmsg value \"$value\" is not equal to \"$textData\" or \"$value\" is not empty.
-	      fi
-	    else
+          else
+        dbgmsg value \"$value\" is not equal to \"$textData\" or \"$value\" is not empty.
+          fi
+        else
               dbgmsg record type $recordType does not match $rec_type
             fi
             dnsrecords="`get_next_domains "$dnsrecords"`"
@@ -394,9 +418,9 @@ elif [ "$1" = nsupdate ] ;then
         elif stricmp "$direction" add ;then
           curl_post "https://api.dynu.com/v2/dns/$domainId/record" "{\"nodeName\":\"$node\",\"recordType\":\"`toupper "$rec_type"`\",\"ttl\":$ttl,\"state\":true,\"group\":\"\",\"textData\":\"$value\"}"
         else
-	  errmsg unsupported direction: "$direction"
-	fi
-	break
+      errmsg unsupported direction: "$direction"
+    fi
+    break
       fi
       domain_list="`get_next_domains $domain_list`"
     done
@@ -419,8 +443,8 @@ elif [ "$1" = getdns ] ;then
         dnsrecord="`get_first_domain "$dnsrecords"`"
         dbgmsg "dnsrecord: $dnsrecord"
         content="`get_value content "$dnsrecord"`"
-	content="`dequote_double "$content"`"
-	infomsg "$content"
+        content="`dequote_double "$content"`"
+        infomsg "$content"
         dnsrecords="`get_next_domains "$dnsrecords"`"
       done
       domain_list="`get_next_domains $domain_list`"
