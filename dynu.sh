@@ -52,7 +52,7 @@ stricmp() {
 
 
 usage() {
-  errmsg "Usage: $PROGNAME [-a API-Key] [-c configfile] [-d debuglevel] [-q] [-v] [-f] [nsupdate|getdns]"
+  errmsg "Usage: $PROGNAME [-a API-Key] [-c configfile] [-d debuglevel] [-q] [-v] [-f] {nsupdate|getdns|setip}"
   exit 1
 }
 
@@ -309,6 +309,8 @@ curl_post() {
 }
 
 if [ "$1" = "" ] ;then
+  usage
+elif [ "$1" = setip ] ;then
   curl_get "https://api.dynu.com/v2/dns"
   domain_list="`get_domain_list`"
   dbgmsg "domain list: $domain_list"
