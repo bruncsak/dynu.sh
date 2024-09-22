@@ -10,7 +10,7 @@
 #  - argument "getdns": list the records of the zones. Does not include the IP address(es) of the apex.
 #
 # the date of the that version
-VERSION_DATE="2024-04-16"
+VERSION_DATE="2024-09-22"
 
 # The meaningful User-Agent to help finding related log entries in the dynu.com server log
 USER_AGENT="dynu.sh/$VERSION_DATE (https://github.com/bruncsak/dynu.sh)"
@@ -209,16 +209,62 @@ curl_loop()
     fi
 }
 
-my_ipv4() {
-  # echo 1.2.3.4 ; return
-  # curl_loop "-s 'http://ifconfig.me'" -s 'http://ifconfig.me'
-  # curl_loop "-s 'http://ipecho.net/plain'" -s 'http://ipecho.net/plain'
-  # curl_loop "-s 'http://checkip.dyndns.com/'" -s 'http://checkip.dyndns.com/' | sed -e 's/^.*: *\([0-9.]*\).*$/\1/'
-    curl_loop "-4 http://ifconfig.co" -s -4 http://ifconfig.co
+ipv4_echo() {
+  case "$1" in
+    ifconfigco)
+      curl_loop "-s -4 -A \"$USER_AGENT\" 'http://ifconfig.co/ip'" -s -4 -A "$USER_AGENT" 'http://ifconfig.co/ip' ;;
+    ifconfigme)
+      curl_loop "-s -4 -A \"$USER_AGENT\" 'http://ifconfig.me/ip'" -s -4 -A "$USER_AGENT" 'http://ifconfig.me/ip' ;;
+    ipechonet)
+      curl_loop "-s -4 -A \"$USER_AGENT\" 'http://ipecho.net/plain'" -s -4 -A "$USER_AGENT" 'http://ipecho.net/plain' ;;
+    dyndnscom)
+      curl_loop "-s -A \"$USER_AGENT\" 'http://checkip.dyndns.com/'" -s -A "$USER_AGENT" 'http://checkip.dyndns.com/' | sed -e 's/^.*: *\([0-9.]*\).*$/\1/' ;;
+    metang)
+      curl_loop "-s -4 -A \"$USER_AGENT\" 'http://metang.itu.ch/local/getip.cgi'" -s -4 -A "$USER_AGENT" 'http://metang.itu.ch/local/getip.cgi' ;;
+  esac
 }
 
-my_ipv6() {
-    curl_loop "-6 http://ifconfig.co" -s -6 http://ifconfig.co
+ipv6_echo() {
+  case "$1" in
+    ifconfigco)
+      curl_loop "-s -6 -A \"$USER_AGENT\" 'http://ifconfig.co/ip'" -s -6 -A "$USER_AGENT" 'http://ifconfig.co/ip' ;;
+    ifconfigme)
+      curl_loop "-s -6 -A \"$USER_AGENT\" 'http://ifconfig.me/ip'" -s -6 -A "$USER_AGENT" 'http://ifconfig.me/ip' ;;
+    ipechonet)
+      curl_loop "-s -6 -A \"$USER_AGENT\" 'http://ipecho.net/plain'" -s -6 -A "$USER_AGENT" 'http://ipecho.net/plain' ;;
+    metang)
+      curl_loop "-s -6 -A \"$USER_AGENT\" 'http://metang.itu.ch/local/getip.cgi'" -s -6 -A "$USER_AGENT" 'http://metang.itu.ch/local/getip.cgi' ;;
+  esac
+}
+
+get_ipv4() {
+  IP_V4="null"
+  for IP_ECHO_SERVICE in ifconfigco ifconfigme ipechonet metang dyndnscom ;do
+    IPV4="`ipv4_echo $IP_ECHO_SERVICE`"
+    if printf '%s\n' "$IPV4" | egrep -s -q -e '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' ;then
+      IP_V4="$IPV4"
+      dbgmsg "The $IP_ECHO_SERVICE IPv4 echo service returned: $IPV4"
+      [ "$LOGLEVEL" -le 2 ] && break
+    else
+      infomsg "Instead of an IP address, the $IP_ECHO_SERVICE IPv4 echo service returned: $IPV4"
+    fi
+  done
+  printf '%s' "$IP_V4"
+}
+
+get_ipv6() {
+  IP_V6="null"
+  for IP_ECHO_SERVICE in ifconfigco ifconfigme ipechonet metang ;do
+    IPV6="`ipv6_echo $IP_ECHO_SERVICE`"
+    if printf '%s\n' "$IPV6" | egrep -s -q -e '^[0-9a-f:]+$' ;then
+      IP_V6="$IPV6"
+      dbgmsg "The $IP_ECHO_SERVICE IPv6 echo service returned: $IPV6"
+      [ "$LOGLEVEL" -le 2 ] && break
+    else
+      infomsg "Instead of an IP address, the $IP_ECHO_SERVICE IPv6 echo service returned: $IPV6"
+    fi
+  done
+  printf '%s' "$IP_V6"
 }
 
 dns_update_data() {
@@ -226,7 +272,7 @@ dns_update_data() {
 {
    "name": "$name"
 # ,"group": ""
-  ,"ipv4Address": "`my_ipv4`"
+  ,"ipv4Address": "`get_ipv4`"
 # ,"ipv6Address": "1111:2222:3333::4444"
 # ,"ttl": 90
 # ,"ipv4": true
@@ -314,6 +360,8 @@ elif [ "$1" = setip ] ;then
   curl_get "https://api.dynu.com/v2/dns"
   domain_list="`get_domain_list`"
   dbgmsg "domain list: $domain_list"
+  act_ipv4Address="`get_ipv4`"
+  act_ipv6Address="`get_ipv6`"
   while [ -n "$domain_list" ] ;do
     domain="`get_first_domain $domain_list`"
     dbgmsg "domain: $domain"
@@ -329,8 +377,8 @@ elif [ "$1" = setip ] ;then
     ipv6Address="`get_value ipv6Address $domain`"
     new_ipv4Address=$ipv4Address
     new_ipv6Address=$ipv6Address
-    new_ipv4Address="`my_ipv4`"
-    new_ipv6Address="`my_ipv6`"
+    new_ipv4Address="$act_ipv4Address"
+    new_ipv6Address="$act_ipv6Address"
   # new_ipv4Address="null"
   # new_ipv6Address="null"
     if [ "$ipv4Address" != "$new_ipv4Address" ] || [ "$ipv6Address" != "$new_ipv6Address" ] || $FORCE ;then
