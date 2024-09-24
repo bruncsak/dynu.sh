@@ -3,14 +3,14 @@
 # dynu.com DDNS update program
 # (C) 2023,2024 Attila Bruncsak
 # Usage:
-#  - no argument: updates the IPv4/IPv6 addresses of the configured domains in dynu.com
+#  - argument "setip": updates the IPv4/IPv6 addresses of the configured domains in dynu.com
 #  - argument "nsupdate": reads the nsupdate style commands on the standard input.
 #  limited functionality: only "update add" and "update delete" implemented and only TXT type
 #  the target is the implementation of the DNS-01 challenge type of the ACME protocol.
 #  - argument "getdns": list the records of the zones. Does not include the IP address(es) of the apex.
 #
 # the date of the that version
-VERSION_DATE="2024-09-22"
+VERSION_DATE="2024-09-23"
 
 # The meaningful User-Agent to help finding related log entries in the dynu.com server log
 USER_AGENT="dynu.sh/$VERSION_DATE (https://github.com/bruncsak/dynu.sh)"
@@ -219,8 +219,6 @@ ipv4_echo() {
       curl_loop "-s -4 -A \"$USER_AGENT\" 'http://ipecho.net/plain'" -s -4 -A "$USER_AGENT" 'http://ipecho.net/plain' ;;
     dyndnscom)
       curl_loop "-s -A \"$USER_AGENT\" 'http://checkip.dyndns.com/'" -s -A "$USER_AGENT" 'http://checkip.dyndns.com/' | sed -e 's/^.*: *\([0-9.]*\).*$/\1/' ;;
-    metang)
-      curl_loop "-s -4 -A \"$USER_AGENT\" 'http://metang.itu.ch/local/getip.cgi'" -s -4 -A "$USER_AGENT" 'http://metang.itu.ch/local/getip.cgi' ;;
   esac
 }
 
@@ -232,14 +230,12 @@ ipv6_echo() {
       curl_loop "-s -6 -A \"$USER_AGENT\" 'http://ifconfig.me/ip'" -s -6 -A "$USER_AGENT" 'http://ifconfig.me/ip' ;;
     ipechonet)
       curl_loop "-s -6 -A \"$USER_AGENT\" 'http://ipecho.net/plain'" -s -6 -A "$USER_AGENT" 'http://ipecho.net/plain' ;;
-    metang)
-      curl_loop "-s -6 -A \"$USER_AGENT\" 'http://metang.itu.ch/local/getip.cgi'" -s -6 -A "$USER_AGENT" 'http://metang.itu.ch/local/getip.cgi' ;;
   esac
 }
 
 get_ipv4() {
   IP_V4="null"
-  for IP_ECHO_SERVICE in ifconfigco ifconfigme ipechonet metang dyndnscom ;do
+  for IP_ECHO_SERVICE in ifconfigco ifconfigme ipechonet dyndnscom ;do
     IPV4="`ipv4_echo $IP_ECHO_SERVICE`"
     if printf '%s\n' "$IPV4" | egrep -s -q -e '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' ;then
       IP_V4="$IPV4"
@@ -254,7 +250,7 @@ get_ipv4() {
 
 get_ipv6() {
   IP_V6="null"
-  for IP_ECHO_SERVICE in ifconfigco ifconfigme ipechonet metang ;do
+  for IP_ECHO_SERVICE in ifconfigco ifconfigme ipechonet ;do
     IPV6="`ipv6_echo $IP_ECHO_SERVICE`"
     if printf '%s\n' "$IPV6" | egrep -s -q -e '^[0-9a-f:]+$' ;then
       IP_V6="$IPV6"
@@ -357,11 +353,11 @@ curl_post() {
 if [ "$1" = "" ] ;then
   usage
 elif [ "$1" = setip ] ;then
+  act_ipv4Address="`get_ipv4`"
+  act_ipv6Address="`get_ipv6`"
   curl_get "https://api.dynu.com/v2/dns"
   domain_list="`get_domain_list`"
   dbgmsg "domain list: $domain_list"
-  act_ipv4Address="`get_ipv4`"
-  act_ipv6Address="`get_ipv6`"
   while [ -n "$domain_list" ] ;do
     domain="`get_first_domain $domain_list`"
     dbgmsg "domain: $domain"
@@ -375,12 +371,8 @@ elif [ "$1" = setip ] ;then
     ipv6WildcardAlias="`get_value ipv6WildcardAlias $domain`"
     ipv4Address="`get_value ipv4Address $domain`"
     ipv6Address="`get_value ipv6Address $domain`"
-    new_ipv4Address=$ipv4Address
-    new_ipv6Address=$ipv6Address
     new_ipv4Address="$act_ipv4Address"
     new_ipv6Address="$act_ipv6Address"
-  # new_ipv4Address="null"
-  # new_ipv6Address="null"
     if [ "$ipv4Address" != "$new_ipv4Address" ] || [ "$ipv6Address" != "$new_ipv6Address" ] || $FORCE ;then
       dbgmsg "name: $name; id: $id; ipv4Address: $ipv4Address -> $new_ipv4Address; ipv6Address: $ipv6Address -> $new_ipv6Address;"
       if [ "$new_ipv4Address" != "null" ] ;then
