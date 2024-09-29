@@ -10,7 +10,7 @@
 #  - argument "getdns": list the records of the zones. Does not include the IP address(es) of the apex.
 #
 # the date of the that version
-VERSION_DATE="2024-09-23"
+VERSION_DATE="2024-09-29"
 
 # The meaningful User-Agent to help finding related log entries in the dynu.com server log
 USER_AGENT="dynu.sh/$VERSION_DATE (https://github.com/bruncsak/dynu.sh)"
@@ -172,6 +172,7 @@ curl_return_text ()
         35) TXT=", SSL connect error" ;;
         52) TXT=", the server did not reply anything" ;;
         56) TXT=", failure in receiving network data" ;;
+        60) TXT=", peer certificate cannot be authenticated with known CA certificates" ;;
          *) TXT="" ;;
     esac
     printf "curl return status: %d%s" "$1" "$TXT"
@@ -209,6 +210,16 @@ curl_loop()
     fi
 }
 
+local_ipv4() {
+  ip -4 address show scope global |
+  awk '$1 == "inet" {sub(/\/.*$/, "", $2); print $2}'
+}
+
+local_ipv6() {
+  ip -6 address show scope global |
+  awk '$1 == "inet6" {sub(/\/.*$/, "", $2); print $2}'
+}
+
 ipv4_echo() {
   case "$1" in
     ifconfigco)
@@ -235,31 +246,39 @@ ipv6_echo() {
 
 get_ipv4() {
   IP_V4="null"
-  for IP_ECHO_SERVICE in ifconfigco ifconfigme ipechonet dyndnscom ;do
-    IPV4="`ipv4_echo $IP_ECHO_SERVICE`"
-    if printf '%s\n' "$IPV4" | egrep -s -q -e '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' ;then
-      IP_V4="$IPV4"
-      dbgmsg "The $IP_ECHO_SERVICE IPv4 echo service returned: $IPV4"
-      [ "$LOGLEVEL" -le 2 ] && break
-    else
-      infomsg "Instead of an IP address, the $IP_ECHO_SERVICE IPv4 echo service returned: $IPV4"
-    fi
-  done
+  LOCAL_IPV4="`local_ipv4`"
+  dbgmsg "Local IPv4 address: $LOCAL_IPV4"
+  if [ -n "$LOCAL_IPV4" ] ;then
+    for IP_ECHO_SERVICE in ifconfigco ifconfigme ipechonet dyndnscom ;do
+      IPV4="`ipv4_echo $IP_ECHO_SERVICE`"
+      if printf '%s\n' "$IPV4" | egrep -s -q -e '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' ;then
+        IP_V4="$IPV4"
+        dbgmsg "The $IP_ECHO_SERVICE IPv4 echo service returned: $IPV4"
+        [ "$LOGLEVEL" -le 2 ] && break
+      else
+        infomsg "Instead of an IP address, the $IP_ECHO_SERVICE IPv4 echo service returned: $IPV4"
+      fi
+    done
+  fi
   printf '%s' "$IP_V4"
 }
 
 get_ipv6() {
   IP_V6="null"
-  for IP_ECHO_SERVICE in ifconfigco ifconfigme ipechonet ;do
-    IPV6="`ipv6_echo $IP_ECHO_SERVICE`"
-    if printf '%s\n' "$IPV6" | egrep -s -q -e '^[0-9a-f:]+$' ;then
-      IP_V6="$IPV6"
-      dbgmsg "The $IP_ECHO_SERVICE IPv6 echo service returned: $IPV6"
-      [ "$LOGLEVEL" -le 2 ] && break
-    else
-      infomsg "Instead of an IP address, the $IP_ECHO_SERVICE IPv6 echo service returned: $IPV6"
-    fi
-  done
+  LOCAL_IPV6="`local_ipv6`"
+  dbgmsg "Local IPv6 address: $LOCAL_IPV6"
+  if [ -n "$LOCAL_IPV6" ] ;then
+    for IP_ECHO_SERVICE in ifconfigco ifconfigme ipechonet ;do
+      IPV6="`ipv6_echo $IP_ECHO_SERVICE`"
+      if printf '%s\n' "$IPV6" | egrep -s -q -e '^[0-9a-f:]+$' ;then
+        IP_V6="$IPV6"
+        dbgmsg "The $IP_ECHO_SERVICE IPv6 echo service returned: $IPV6"
+        [ "$LOGLEVEL" -le 2 ] && break
+      else
+        infomsg "Instead of an IP address, the $IP_ECHO_SERVICE IPv6 echo service returned: $IPV6"
+      fi
+    done
+  fi
   printf '%s' "$IP_V6"
 }
 
@@ -316,7 +335,7 @@ get_value() {
 
 API_status_check() {
 status_code="`get_status_code`"
-if [ "$status_code" -ne 200 ] ;then
+if [ "$status_code" != "200" ] ;then
     errmsg "Request of: $1"
     if [ -n "$2" ] ; then
         errmsg "with the following post data: $2"
