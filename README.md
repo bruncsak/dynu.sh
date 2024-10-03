@@ -10,11 +10,11 @@ Features of the program:
 
 ### Installation/configuration
 Prerequisite for the use of this program to be executed on the `dynu.com` web site:
-1. create an account, free one is just fine
+1. create an account, a free one is just fine
 2. select your domain name
 3. get the API-key (token) from the web site, you have to put this into the configuration file later
 
-Next steps on your linux systems:
+Next steps on your system:
 
 4. download the program
 5. run the program (no need to run as root), that will initialize a default configuration file
@@ -23,5 +23,5 @@ Next steps on your linux systems:
 8. optionally and preferably, you may want to schedule its regular run via crontab
 
 ### Troubleshooting
-Running the program without argument gives a short usage instruction.
+Running the program without arguments gives a short usage instruction.
 If you have any problem, try first to run with the `-d 2` option. Then, please do not hesitate to open an issue!
