@@ -10,7 +10,7 @@
 #  - argument "getdns": list the records of the zones. Does not include the IP address(es) of the apex.
 #
 # the date of the that version
-VERSION_DATE="2024-09-29"
+VERSION_DATE="2024-12-22"
 
 # The meaningful User-Agent to help finding related log entries in the dynu.com server log
 USER_AGENT="dynu.sh/$VERSION_DATE (https://github.com/bruncsak/dynu.sh)"
@@ -34,6 +34,11 @@ dbgmsg() {
   log 2 "$@"
 }
 
+err_exit() {
+  errmsg "$@"
+  exit 1
+}
+
 checknumber() {
   printf '%s\n' "$1" | egrep -s -q -e '^-?[0-9]+$'
 }
@@ -52,8 +57,7 @@ stricmp() {
 
 
 usage() {
-  errmsg "Usage: $PROGNAME [-a API-Key] [-c configfile] [-d debuglevel] [-q] [-v] [-f] {nsupdate|getdns|setip}"
-  exit 1
+  err_exit "Usage: $PROGNAME [-a API-Key] [-c configfile] [-d debuglevel] [-q] [-v] [-f] {nsupdate|getdns|setip}"
 }
 
 PROGNAME="`basename $0`"
@@ -69,7 +73,6 @@ TMP="`getopt a:c:d:qvf $*`"
 if [ $? != 0 ]
 then
   usage
-  exit 1
 fi
 # evaluate the result of parsing
 set -- $TMP
@@ -86,8 +89,7 @@ do
        if checknumber $2 ;then
          LOGLEVEL="$2"
        else
-         errmsg "Debuglevel argument must be a number: $2"
-         exit 1
+         err_exit "Debuglevel argument must be a number: $2"
        fi
        shift;;
   -q)  # set up the -q flag (quiet)
@@ -104,7 +106,7 @@ shift   # skip double dash
 dbgmsg "Config file: $CONFIG_FILE"
 
 if [[ "$CONFIG_FILE" = "$CONFIG_DIR/config" && ! -e "$CONFIG_FILE" && -z "$API_KEY" ]] ;then
-    infomsg "Initializing config file template at $CONFIG_FILE"
+    infomsg "Initializing config file template at $CONFIG_FILE, you must add the API-Key into that file."
     [ -d "$CONFIG_DIR" ] || mkdir -p "$CONFIG_DIR"
     cat << ! > "$CONFIG_FILE"
 #   Please specify the API-Key via initializing
@@ -115,11 +117,10 @@ API_KEY=
 !
 fi
 
-[ -e "$CONFIG_FILE" ] && . "$CONFIG_FILE"
+[[ -e "$CONFIG_FILE" && -z "$API_KEY" ]] && . "$CONFIG_FILE"
 
 if [ -z "$API_KEY" ] ;then
-    errmsg "Undefined API_KEY, please specify in $CONFIG_FILE"
-    exit 1
+    err_exit "Undefined API_KEY, please specify in $CONFIG_FILE or as command line argument with the \"-a\" option"
 fi
 
 RESP_HEADER="`mktemp`"
@@ -342,8 +343,7 @@ if [ "$status_code" != "200" ] ;then
         errmsg
     fi
     cat "$RESP_BODY" >& 2
-    errmsg
-    exit 1
+    err_exit
 fi
 }
 
@@ -369,9 +369,7 @@ curl_post() {
     API_status_check "$1" "$2"
 }
 
-if [ "$1" = "" ] ;then
-  usage
-elif [ "$1" = setip ] ;then
+setip_action() {
   act_ipv4Address="`get_ipv4`"
   act_ipv6Address="`get_ipv6`"
   curl_get "https://api.dynu.com/v2/dns"
@@ -411,9 +409,10 @@ elif [ "$1" = setip ] ;then
     # curl_post "https://api.dynu.com/v2/dns/$id" "`dns_update_data`"
     domain_list="`get_next_domains $domain_list`"
   done
-elif [ "$1" = nsupdate ] ;then
+}
+
+nsupdate_action() {
   # RFC2136
-  dbgmsg "nsupdate action"
   while read action direction domain_name ttl class rec_type value
   do
     dbgmsg "value: $value"
@@ -486,8 +485,9 @@ elif [ "$1" = nsupdate ] ;then
       domain_list="`get_next_domains $domain_list`"
     done
   done
-elif [ "$1" = getdns ] ;then
-  dbgmsg "getdns action"
+}
+
+getdns_action() {
     curl_get "https://api.dynu.com/v2/dns"
     domain_list="`get_domain_list`"
     dbgmsg "domain list: $domain_list"
@@ -505,15 +505,25 @@ elif [ "$1" = getdns ] ;then
         dbgmsg "dnsrecord: $dnsrecord"
         content="`get_value content "$dnsrecord"`"
         content="`dequote_double "$content"`"
-        infomsg "$content"
+        printf '%s\n' "$content"
         dnsrecords="`get_next_domains "$dnsrecords"`"
       done
       domain_list="`get_next_domains $domain_list`"
     done
-else
-  errmsg "Unsupported action: $1"
-  exit 1
-fi
+}
+
+case "$1" in
+  "")
+    usage
+    ;;
+  setip|nsupdate|getdns)
+    dbgmsg "$1 action"
+    "$1"_action
+    ;;
+  *)
+    err_exit "Unknown action: $1"
+    ;;
+esac
 
 exit
 
