@@ -12,13 +12,13 @@ Features of the program:
 Prerequisite for the use of this program to be executed on the `dynu.com` web site:
 1. create an account, a free one is just fine
 2. select your domain name
-3. get the API-key (token) from the web site, you have to put this into the configuration file later
+3. get the API-Key from the web site available under "Control Panel/API Credentials", you have to put this into the configuration file later
 
 Next steps on your system:
 
 4. download the program
 5. run the program (no need to run as root), that will initialize a default configuration file
-6. edit the configuration file, add the API-key (token) into it
+6. edit the configuration file, add the API-Key into it
 7. run the program with the `setip` argument
 8. optionally and preferably, you may want to schedule its regular run via crontab
 
