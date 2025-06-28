@@ -40,7 +40,7 @@ err_exit() {
 }
 
 checknumber() {
-  printf '%s\n' "$1" | egrep -s -q -e '^-?[0-9]+$'
+  printf '%s\n' "$1" | grep -E -s -q -e '^-?[0-9]+$'
 }
 
 toupper() {
@@ -252,7 +252,7 @@ get_ipv4() {
   if [ -n "$LOCAL_IPV4" ] ;then
     for IP_ECHO_SERVICE in ifconfigco ifconfigme ipechonet dyndnscom ;do
       IPV4="`ipv4_echo $IP_ECHO_SERVICE`"
-      if printf '%s\n' "$IPV4" | egrep -s -q -e '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' ;then
+      if printf '%s\n' "$IPV4" | grep -E -s -q -e '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' ;then
         IP_V4="$IPV4"
         dbgmsg "The $IP_ECHO_SERVICE IPv4 echo service returned: $IPV4"
         [ "$LOGLEVEL" -le 2 ] && break
@@ -271,7 +271,7 @@ get_ipv6() {
   if [ -n "$LOCAL_IPV6" ] ;then
     for IP_ECHO_SERVICE in ifconfigco ifconfigme ipechonet ;do
       IPV6="`ipv6_echo $IP_ECHO_SERVICE`"
-      if printf '%s\n' "$IPV6" | egrep -s -q -e '^[0-9a-f:]+$' ;then
+      if printf '%s\n' "$IPV6" | grep -E -s -q -e '^[0-9a-f:]+$' ;then
         IP_V6="$IPV6"
         dbgmsg "The $IP_ECHO_SERVICE IPv6 echo service returned: $IPV6"
         [ "$LOGLEVEL" -le 2 ] && break
@@ -284,7 +284,7 @@ get_ipv6() {
 }
 
 dns_update_data() {
-    egrep -v '^[ 	]*(#|$)' << ! |
+    grep -E -v '^[ 	]*(#|$)' << ! |
 {
    "name": "$name"
 # ,"group": ""
@@ -528,7 +528,7 @@ esac
 exit
 
 dns_record_add_data() {
-    egrep -v '^[ 	]*(#|$)' << ! |
+    grep -E -v '^[ 	]*(#|$)' << ! |
 {
   "nodeName": "_acme-challenge",
   "recordType": "TXT",
